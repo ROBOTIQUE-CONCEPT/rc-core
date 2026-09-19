@@ -8,100 +8,72 @@ decision, not just a wording fix. Each entry stays until a human closes it
 here). Do not add entries for stale version numbers alone — fix those
 directly in the affected file.
 
-## 1. `rc-core`'s preflight tool and several docs describe a retired "standalone business-module plugin" architecture
+Two entries closed 2026-09-19 and still closed:
 
-**Context.** `docs/ARCHITECTURE.md` (§37, the "namespace policy" section) and
-`tools/architecture-preflight.php` both assume business logic ships as
-separate, independent plugins — one per domain (`RC-Catalog`, `RC-Leads`,
-`RC-Products`, `RC-Assets`, `RC-Interventions`, `RC-Inventory`, `RC-Quotes`,
-`RC-Contacts`, `RC-Orders`, `RC-Invoices`, `RC-Projects`, `RC-Tasks`,
-`RC-Deliveries`), each under its own `RC\{Module}\` (per §37) or
-`WPRC\{Module}\` (per the preflight script's hardcoded namespace map)
-namespace root. `docs/MULTISITE-CUTOVER.md` is a concrete runbook built on
-the same premise (it sequences updating "RC Core", "RC Catalog
-1.7.0-alpha2", "RC Leads 0.3.0-alpha2" as three separately-deployed
-plugins).
+1. **Standalone-plugin vs. embedded-module architecture** — no separate
+   `my`-side plugins; embedded modules inside `rc-portal`. See
+   `docs/ARCHITECTURE.md`'s "Amendments" section, decision 1.
+2. **Module-rendered HTML vs. theme-only rendering** — no exception, the
+   `docs/PORTAL-UI.md` declarative contract is normative (though not yet
+   implemented). See `docs/ARCHITECTURE.md`'s "Amendments" section,
+   decision 2.
 
-**What actually ships today:** a single `rc-portal` plugin that embeds all
-current business modules (`products`, `tools`, `maintenance`, `inventory`,
-`leads`) under one shared namespace root, `RC\Portal\Modules\{Module}\`.
-There is no `RC-Catalog`, `RC-Leads`, or any other standalone business
-plugin in this workspace's three repos (`rc-core`, `rc-portal`,
-`rc-portal-theme`).
+## 1. Two incompatible module-lifecycle contracts exist — which is canonical for an embedded `my`-side module? (reopened 2026-09-19)
 
-**Impact.**
-- `tools/architecture-preflight.php`'s Check A/B (Core-must-not-depend-upward,
-  module-to-module isolation) search for the namespace strings
-  `WPRC\{Module}\` and `WPRC\Portal\`. Real `rc-portal` code uses
-  `RC\Portal\*`, not `WPRC\Portal\*` — so when this script is pointed at the
-  real `rc-portal` repo, its Portal/module isolation checks never match
-  anything and silently pass regardless of what `rc-portal` actually
-  imports. The isolation guarantee this tool is meant to provide is not
-  currently being verified.
-- `docs/MULTISITE-CUTOVER.md`'s runbook cannot be executed as written —
-  the plugins it names to update in sequence do not exist as separate
-  deployables anymore.
+**Context.** `rc-core` ships a module-lifecycle mechanism:
+`Contracts\ModuleInterface` (`id()`, `version()`, `minimumCoreVersion()`,
+`register(Container)`, `boot()`), `Module\ModuleRegistry` (enforces
+`minimumCoreVersion()` via `version_compare()`), the global
+`rc_register_module()` function, and a `do_action('wprc/core/register_modules', ...)`
+hook. `rc-portal`'s embedded modules do not use it — they implement a
+different, `rc-portal`-owned interface instead:
+`RC\Portal\Module\EmbeddedModuleInterface`, discovered by
+`ModuleCatalog::loadFromDirectory()`.
 
-**Options.**
-- (a) Update the preflight script's namespace map to the real
-  `RC\Portal\Modules\{Module}\` convention and drop the standalone-plugin
-  namespace list, then correct `ARCHITECTURE.md` §37 to match; mark
-  `MULTISITE-CUTOVER.md` as historical (a past migration record, not a
-  live runbook) rather than delete it.
-- (b) Decide the standalone-per-domain-plugin model is still the intended
-  *future* shape (i.e. `rc-portal`'s embedded modules are a transitional
-  state) and keep the tool/docs aimed at that future, while documenting
-  today's embedded-module reality as the current transitional exception.
-- (c) Retire `tools/architecture-preflight.php` from `rc-core` entirely and
-  rely on `rc-portal/tools/preflight.php`'s own cross-module-import check
-  (which does target the real `RC\Portal\Modules\*` namespace and does work
-  correctly today) as the sole enforcement point for module isolation.
+**This entry was closed once already, incorrectly.** On 2026-09-19 it was
+decided to retire Core's mechanism as dead code, based on a repo-wide
+search across `rc-core`, `rc-portal`, and `rc-portal-theme` that found zero
+callers. It was removed in `rc-core` 0.6.0-alpha11. This broke production:
+**RC-Catalog** (the separate `www`-side plugin) depends on this mechanism.
+RC-Catalog's source is not part of this repository, `rc-portal`, or
+`rc-portal-theme`, so it was never checked — the "zero callers" finding was
+true only for the three repos actually searched, not for the whole
+platform. The removal was reverted in `rc-core` 0.6.0-alpha12; Core's
+mechanism is back and must not be removed again without confirming
+RC-Catalog's actual usage first.
 
-**Recommendation.** (a) — it costs one afternoon, restores a currently-inert
-safety check, and removes a runbook that cannot be followed as written. (c)
-is a reasonable fallback if nobody wants to maintain two preflight tools,
-but would leave `rc-core` with no isolation check of its own for anything
-that isn't `rc-portal`.
-
-**Status.** Pending decision.
-
-## 2. Is module-owned HTML through the UI Registry contract the permanent presentation model, or a transitional exception?
-
-**Context.** `docs/ARCHITECTURE.md`'s presentation rule and `rc-portal`'s own
-`README.md` both state, in effect, that RC Portal Theme is the sole owner of
-frontend HTML/CSS/JS on `my` and that business modules do not own visual
-templates. In the actual, working implementation, RC Core's UI Registry
-contract (documented in `docs/PORTAL-UI.md`) has a module's registered page
-supply its *own* pre-rendered HTML string via a `renderer` callback; RC
-Portal's router stores that string on `RouteContext::$pageHtml`, and the
-theme's `templates/portal/parts/page.php` does `echo $context->pageHtml;`
-verbatim. In `rc-portal`, `modules/products/src/Ui/ProductsPages.php` (over
-1000 lines) and `modules/tools/src/Ui/ToolsPages.php` build complete
-`<table>`/`<form>`/tab markup this way — this is the normal, working
-mechanism for every module page today, not a bug or a one-off shortcut.
-
-**Impact.** An agent reading "the theme owns all presentation" literally
-would either wrongly flag every module's `Ui/*Pages.php` class as a
-violation, or wrongly conclude modules should stop using the UI Registry
-render contract — neither is correct today. Conversely, an agent extending
-this pattern indefinitely (more and more markup logic living in module `Ui`
-classes) forecloses ever moving to a model where modules hand the theme
-structured data and only the theme decides markup — a heavier, harder to
-reverse investment.
+**Impact.** Any future decision here must account for RC-Catalog as a real,
+confirmed consumer of `Contracts\ModuleInterface`/`rc_register_module()` —
+not a hypothetical one. Concretely: read RC-Catalog's source (get access to
+that repository) before proposing any change to this mechanism, and check
+exactly which classes/hooks it uses and how tightly, before choosing an
+option below.
 
 **Options.**
-- (a) Formalize the current behavior as permanent and correct
-  `ARCHITECTURE.md`/`rc-portal/README.md` wording: the theme owns layout,
-  chrome, design system, CSS and JS; a module owns the content HTML of the
-  pages it registers, produced through the UI Registry `renderer` contract.
-- (b) Keep the "theme owns all presentation" rule as the long-term target
-  and schedule a migration where module render callbacks return structured
-  data (arrays/DTOs) and the theme (or a shared Portal template layer) is
-  responsible for turning that into HTML — a real, multi-module refactor.
+- (a) Make `rc-portal`'s `EmbeddedModuleInterface` extend/implement Core's
+  `ModuleInterface` (or have `ModuleCatalog` adapt each embedded module
+  into one and call `rc_register_module()` on its behalf), so Core's
+  registry and version-gate get exercised for embedded modules too, while
+  RC-Catalog keeps using Core's mechanism directly as it does today.
+- (b) ~~Retire Core's mechanism as dead/aspirational.~~ **Ruled out** — it
+  is not dead; RC-Catalog uses it in production. Do not choose this again
+  without first migrating RC-Catalog off it, which is a separate,
+  deliberate, coordinated change of its own.
+- (c) Keep both, explicitly scoped: Core's `ModuleInterface` for
+  `RC-Catalog` (a standalone `www`-side plugin), `EmbeddedModuleInterface`
+  for anything embedded in `rc-portal`. Document the split clearly in
+  `docs/MODULE-DEVELOPMENT.md` so neither looks like dead code from either
+  repo's perspective.
 
-**Recommendation.** No recommendation offered here — both are workable and
-the cost/benefit depends on product priorities (how many more module UIs
-are expected, how much reuse across modules would benefit from shared
-templates) that are not this audit's call to make.
+**Recommendation.** (c) is very likely correct now that RC-Catalog is a
+confirmed real consumer — it matches what's actually running today with
+the least risk, and just needs the documentation split written up clearly.
+(a) is worth it only if there's a concrete reason to unify the two
+lifecycles technically, not just document them. Not this audit's call to
+finalize — get RC-Catalog's actual source/usage in front of a human before
+closing this again.
 
-**Status.** Pending decision.
+**Status.** Pending decision. Do not remove Core's `ModuleInterface`,
+`ModuleRegistry`, `rc_register_module()`, or the `wprc/core/register_modules`
+action again until this is genuinely resolved with RC-Catalog's real usage
+accounted for.

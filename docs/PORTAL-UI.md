@@ -1,5 +1,17 @@
 # RC Portal presentation contract
 
+> **Implementation status (2026-09-19):** this contract was confirmed
+> normative with **no exception** — modules never build HTML, only Portal
+> does. It is **not yet implemented**, though: `rc-portal`'s actual
+> embedded modules (`products`, `tools`) currently register pages via a
+> simpler mechanism (`EmbeddedModuleInterface` + `rc_register_ui_page()`
+> with a raw callback that returns a finished HTML string), not the
+> `PageDefinition`/`TableDefinition` objects described below. Treat this
+> file as the target contract to migrate existing modules toward, not a
+> description of what they do today. See
+> `rc-core/docs/ARCHITECTURE-OPEN-QUESTIONS.md` for a related, still-open
+> question about the module lifecycle contract itself.
+
 RC Portal is the **single presentation infrastructure** for the private `my` application.
 
 Core remains non-visual. It owns security, capabilities, routing primitives, contracts and the low-level UI route registry. Portal owns all layout/rendering/CSS/JS and exposes the declarative presentation API used by business modules.
