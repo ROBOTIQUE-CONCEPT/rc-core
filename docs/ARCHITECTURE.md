@@ -42,11 +42,22 @@ responsibilities, caching, security, roles) is unaffected.
    `TableDefinition`. This is tracked as migration debt, not an accepted
    permanent design — see `docs/PORTAL-UI.md`'s own implementation-status
    note and `rc-core/docs/ARCHITECTURE-OPEN-QUESTIONS.md`.
+3. **(Decided 2026-09-19) Core's own module-lifecycle mechanism is
+   retired.** §9 "Module contract" below describes a `ModuleInterface`
+   conceptual example; the real, shipped version of that mechanism
+   (`Contracts\ModuleInterface`, `Module\ModuleRegistry`,
+   `rc_register_module()`, the `wprc/core/register_modules` action) existed
+   in Core but was never used by `rc-portal`'s real embedded modules —
+   confirmed to have zero callers across all three repos. It has been
+   **removed** from `rc-core` (see `CHANGELOG.md`).
+   `RC\Portal\Module\EmbeddedModuleInterface` is the one real, canonical
+   module-lifecycle contract for an embedded `my`-side module — see
+   `rc-portal/modules/AGENTS.md` and `rc-core/docs/MODULE-DEVELOPMENT.md`.
+   Read §9 as historical context for a mechanism that no longer exists in
+   code, not as current API.
 
-See `rc-core/docs/ARCHITECTURE-OPEN-QUESTIONS.md` for what is still
-genuinely undecided (a related, newly-found gap between this document's
-own `ModuleInterface`/`ModuleRegistry` mechanism and what `rc-portal`
-actually implements).
+See `rc-core/docs/ARCHITECTURE-OPEN-QUESTIONS.md` for what remains
+genuinely undecided — as of this decision, no entries are currently open.
 
 ---
 
@@ -369,6 +380,12 @@ RC-Assets MUST define its own asset tables and schema.
 ---
 
 # 9. Module contract
+
+> **Historical (see Amendments, decision 3, 2026-09-19):** the concrete
+> version of this API (`Contracts\ModuleInterface`, `Module\ModuleRegistry`,
+> `rc_register_module()`) has been removed from `rc-core` — it had zero
+> real callers. The canonical module-lifecycle contract today is
+> `rc-portal`'s `EmbeddedModuleInterface`; see `rc-portal/modules/AGENTS.md`.
 
 Every business plugin MUST register itself through the Core-defined module API.
 

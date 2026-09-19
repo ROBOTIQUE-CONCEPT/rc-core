@@ -1,4 +1,4 @@
-# RC Core 0.6.0-alpha10
+# RC Core 0.6.0-alpha11
 
 Socle technique et SDK partagé des plugins WordPress Robotique Concept.
 

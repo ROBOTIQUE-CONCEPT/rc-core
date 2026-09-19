@@ -10,7 +10,7 @@ Core owns platform *conventions*; it contains no business/domain logic of
 its own (no products, leads, maintenance, inventory, tools — those live in
 `rc-portal`).
 
-Current version: `0.6.0-alpha10` (`rc-core.php` header and the
+Current version: `0.6.0-alpha11` (`rc-core.php` header and the
 `RC_CORE_VERSION` constant — both authoritative and, as of this writing,
 in agreement). Requires WordPress `>= 6.8`, PHP `>= 8.1`.
 
@@ -35,6 +35,13 @@ in agreement). Requires WordPress `>= 6.8`, PHP `>= 8.1`.
   `rc-portal`'s real modules today — see `docs/PORTAL-UI.md`'s
   implementation-status note. Don't treat the current HTML-building
   pattern in `products`/`tools` as an accepted design to extend.
+- **(Decided 2026-09-19)** Core no longer defines its own module-lifecycle
+  contract. `Contracts\ModuleInterface`, `Module\ModuleRegistry`,
+  `rc_register_module()`, and the `wprc/core/register_modules` action were
+  removed (confirmed zero callers across all three repos before removal).
+  `RC\Portal\Module\EmbeddedModuleInterface` (in `rc-portal`) is the one
+  real, canonical module-lifecycle contract today. Don't reintroduce a
+  Core-owned module registry/interface without a new human decision.
 - **Namespace**: everything under `src/` is `WPRC\Core\*` — this is the
   real, current convention (confirmed by the autoloader, which only loads
   classes under that literal prefix). `docs/ARCHITECTURE.md` §37 documents
@@ -68,13 +75,17 @@ in agreement). Requires WordPress `>= 6.8`, PHP `>= 8.1`.
 - `src/Plugin.php` — the composition root; `registerServices()` wires
   essentially every Core service into `Container`.
 - `src/Contracts/` — the public interfaces other repos implement/consume:
-  `ModuleInterface`, `ServiceProviderInterface`, `BootableInterface`,
-  `CacheInterface`, `LoggerInterface`, `PlaceholderProviderInterface`, and
-  per-entity ERP contracts under `Contracts/ERP/*`
+  `ServiceProviderInterface`, `BootableInterface`, `CacheInterface`,
+  `LoggerInterface`, `PlaceholderProviderInterface`, and per-entity ERP
+  contracts under `Contracts/ERP/*`
   (Product/Company/Employee/Address/Opportunity/Quotation). `Contracts/Assets/*`
   and `Contracts/Products/ProductCatalogProviderInterface` are contracts
   pre-declared for a module that doesn't exist yet — don't delete them as
-  "unused."
+  "unused." `ModuleInterface` used to live here too; it was **removed**
+  2026-09-19 (zero callers — see Architecture boundaries above). Don't
+  treat an "unused interface" you find here the same way without checking
+  its actual callers first — `Assets`/`Products` genuinely are pre-declared
+  for future work, `ModuleInterface` genuinely wasn't.
 - `src/InternalApi/` — HMAC-signed server-to-server request/response
   primitives (`RequestSigner`, `ReplayGuard`, `Authenticator`, `Client`,
   `InternalApiSecret`). Foundations only — no live route uses this yet. Any
@@ -107,11 +118,10 @@ in agreement). Requires WordPress `>= 6.8`, PHP `>= 8.1`.
   supersede, rather than requiring a full rewrite of a 1500-line "frozen"
   document.
 - `docs/MODULE-DEVELOPMENT.md` — shorter, more current companion to
-  ARCHITECTURE.md; prefer it for the module-author's-eye view. Has its own
-  implementation-status notes flagging that its "Module lifecycle" example
-  doesn't match what `rc-portal`'s real modules implement (see
-  `docs/ARCHITECTURE-OPEN-QUESTIONS.md` #1 — a newly-found, still-open
-  question, distinct from the two closed 2026-09-19 decisions).
+  ARCHITECTURE.md; prefer it for the module-author's-eye view. No longer
+  shows a Core-owned "Module lifecycle" example (that mechanism was
+  removed 2026-09-19 — see Architecture boundaries above); points to
+  `rc-portal`'s `EmbeddedModuleInterface` and `modules/AGENTS.md` instead.
 - `docs/MULTISITE-CUTOVER.md` — a migration runbook written for the
   retired standalone-plugin architecture; now marked historical at the top
   of the file. Don't follow it literally.
@@ -186,8 +196,9 @@ in agreement). Requires WordPress `>= 6.8`, PHP `>= 8.1`.
 ## Change workflow
 
 - Read `docs/MODULE-DEVELOPMENT.md` first for anything touching the
-  module-facing contract surface (`ModuleInterface`, capability
-  registration, the `rc_core()` accessor surface). Read
+  module-facing contract surface (capability registration, ERP access, the
+  `rc_core()` accessor surface — the module-lifecycle contract itself is
+  `rc-portal`'s `EmbeddedModuleInterface`, not anything in Core). Read
   `docs/ARCHITECTURE.md` for anything touching ERP caching, multisite, or
   the InternalApi — but cross-check its dependency-graph and namespace
   sections against this file first (see above).
@@ -232,11 +243,13 @@ in agreement). Requires WordPress `>= 6.8`, PHP `>= 8.1`.
   "Compatibility" note when the change affects what a consuming module
   needs (this is the platform's actual backward-compatibility record — read
   the last several entries before assuming a given contract is stable).
-- `ModuleRegistry::register()` enforces `minimumCoreVersion()` at runtime
-  via `version_compare()` — a module declaring a floor above the installed
-  Core version will hard-fail. Keep this in mind when bumping Core's own
-  version: it's not just documentation, it's an executing gate on the
-  Portal side.
+- There is no per-module Core version gate anymore (that lived in the
+  now-removed `ModuleRegistry::register()`). The real, live gate is
+  `rc-portal`'s own plugin-level check: `RC_PORTAL_MIN_CORE_VERSION`
+  checked against `RC_CORE_VERSION` via `version_compare()` at activation
+  and boot. Keep that in mind when bumping Core's version — it's an
+  executing gate on the Portal side, just a coarser one (whole-plugin, not
+  per-module) than before.
 - Do not treat `README.md`'s version header as authoritative — it has
   drifted from `rc-core.php` before (fixed once during this documentation
   pass; watch for it recurring). `CHANGELOG.md`'s top entry is the more
@@ -264,5 +277,5 @@ in agreement). Requires WordPress `>= 6.8`, PHP `>= 8.1`.
 | Multisite / `SiteContext` | `docs/ARCHITECTURE.md` (multisite sections) + `docs/MULTISITE-CUTOVER.md` (marked historical — re-derive the real order from current versions, don't follow it literally) |
 | UI Registry / Admin-Internal-External pages | `docs/PORTAL-UI.md`, then `rc-portal/modules/AGENTS.md` for the consuming side |
 | InternalApi / signed requests | `src/InternalApi/*` source directly — no dedicated doc beyond `docs/ARCHITECTURE.md` §17 |
-| Module lifecycle / registration (`ModuleInterface` vs. `EmbeddedModuleInterface`) | `docs/ARCHITECTURE-OPEN-QUESTIONS.md` #1 — genuinely unresolved, pick neither contract as "correct" without a human decision |
+| Module lifecycle / registration | Decided (2026-09-19) — `RC\Portal\Module\EmbeddedModuleInterface` is canonical; Core's own mechanism was removed. Read `rc-portal/modules/AGENTS.md` and `docs/MODULE-DEVELOPMENT.md` |
 | Namespace conventions, dependency direction, presentation ownership | These are now **decided** (2026-09-19, no exception) — read `docs/ARCHITECTURE.md`'s "Amendments" section and `docs/PORTAL-UI.md`'s implementation-status note, not the open-questions doc |

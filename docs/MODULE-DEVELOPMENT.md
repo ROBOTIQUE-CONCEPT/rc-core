@@ -2,25 +2,33 @@
 
 This file is a concise implementation companion to `ARCHITECTURE.md`.
 
-> **Implementation status (2026-09-19):** the module lifecycle shown below
-> (`ModuleInterface`, `rc_register_module()`, the `wprc/core/register_modules`
-> action) is real, shipped Core code — but `rc-portal`'s actual embedded
-> modules do not use it. They implement a different, `rc-portal`-owned
-> interface instead (`EmbeddedModuleInterface`, discovered by
-> `ModuleCatalog::loadFromDirectory()` globbing `modules/*/module.php`),
-> with a different shape (`descriptor(): ModuleDescriptor` instead of
-> separate `id()`/`version()`/`minimumCoreVersion()` methods, and no
-> `Container` parameter on `register()`). Which of the two should be
-> canonical for an embedded `my`-side module is an open question — see
-> `rc-core/docs/ARCHITECTURE-OPEN-QUESTIONS.md`. Don't assume the example
-> below reflects what a module in `rc-portal/modules/` actually looks like
-> today; read an existing one (e.g. `rc-portal/modules/products/module.php`)
-> instead. Separately, the "Presentation surfaces" section further down is
-> also not yet implemented — see its own note and `docs/PORTAL-UI.md`.
+> **Resolved 2026-09-19** (was: implementation-status note about two
+> competing lifecycle contracts). RC Core used to ship its own module
+> lifecycle mechanism (`Contracts\ModuleInterface`, `Module\ModuleRegistry`,
+> `rc_register_module()`, the `wprc/core/register_modules` action), but
+> `rc-portal`'s embedded modules never used it — they used a different,
+> `rc-portal`-owned interface (`EmbeddedModuleInterface`, discovered by
+> `ModuleCatalog::loadFromDirectory()` globbing `modules/*/module.php`).
+> Decision: Core's mechanism was dead/aspirational code with zero callers
+> (confirmed by grep across all three repos) and has been **removed** from
+> `rc-core` (`Contracts/ModuleInterface.php`, `Module/ModuleRegistry.php`,
+> `rc_register_module()`, the `wprc/core/register_modules` action, and
+> `Plugin::modules()`/its container registration — see `CHANGELOG.md`).
+> `EmbeddedModuleInterface` is the one real, canonical contract for an
+> embedded `my`-side module today. This doc no longer shows a Core-owned
+> lifecycle example below — read an existing module instead (e.g.
+> `rc-portal/modules/products/module.php`) and `rc-portal/modules/AGENTS.md`
+> for the module-author's-eye rules. Separately, the "Presentation surfaces"
+> section further down is also not yet implemented — see its own note and
+> `docs/PORTAL-UI.md`.
 
 ## Mandatory rules
 
-1. A business module depends on RC Core for infrastructure and RC Portal for declarative presentation on `my`; it never depends on another business module.
+1. A business module depends on RC Core for infrastructure. Presentation is
+   also Core-owned at the contract level (decided 2026-09-19, no exception):
+   a module supplies semantic page/table data into Core's declarative UI
+   Registry (`docs/PORTAL-UI.md`); it does not depend on RC Portal itself
+   for rendering. A module never depends on another business module.
 2. Never import another RC business module namespace.
 3. Never call the ERP directly from a business module.
 4. Never implement a second cache/logger/translation/placeholder/permission framework.
@@ -33,53 +41,18 @@ This file is a concise implementation companion to `ARCHITECTURE.md`.
 
 ## Module lifecycle
 
-A migrated module implements:
-
-```php
-use WPRC\Core\Container;
-use WPRC\Core\Contracts\ModuleInterface;
-
-final class Module implements ModuleInterface
-{
-    public function id(): string
-    {
-        return 'assets';
-    }
-
-    public function version(): string
-    {
-        return RC_ASSETS_VERSION;
-    }
-
-    public function minimumCoreVersion(): string
-    {
-        return '0.6.0-alpha2';
-    }
-
-    public function register(Container $container): void
-    {
-        rc_register_capabilities($this->id(), [
-            'rc_assets_read',
-            'rc_assets_edit',
-        ]);
-
-        // Register module-owned services here.
-    }
-
-    public function boot(): void
-    {
-        // Register WordPress runtime hooks here.
-    }
-}
-```
-
-The plugin file registers the module early enough for Core's lifecycle event:
-
-```php
-add_action('wprc/core/register_modules', static function (): void {
-    rc_register_module(new Module());
-});
-```
+RC Core does not define a module lifecycle contract itself (it did once —
+see the resolved note above). An embedded module implements RC Portal's
+`RC\Portal\Module\EmbeddedModuleInterface` (`descriptor()`, `register()`,
+`boot()`), discovered by `ModuleCatalog::loadFromDirectory()` globbing
+`modules/*/module.php`. That contract, its `ModuleDescriptor` shape, and
+the per-module rules are documented in `rc-portal/modules/AGENTS.md` — read
+that file and an existing module (e.g.
+`rc-portal/modules/products/module.php`) rather than expecting an example
+here. What a module still gets from Core, regardless of that lifecycle
+mechanism, is everything below: capability registration
+(`rc_register_capabilities()`), ERP access, the request context, and the
+architecture preflight gate.
 
 ## Forbidden example
 

@@ -2,7 +2,7 @@
 
 > **Historical note (2026-09-19):** this runbook was written for RC Core
 > `0.6.0-alpha2` and a "RC Leads" installed as its own separate plugin —
-> both long superseded (Core is at `0.6.0-alpha10`; `my`-side business
+> both long superseded (Core is at `0.6.0-alpha11`; `my`-side business
 > logic, including leads, is now the `leads` module embedded in a single
 > `RC Portal` plugin — see `docs/ARCHITECTURE.md`'s Amendments section).
 > Step 2 below cannot be followed as written today. Kept for historical
