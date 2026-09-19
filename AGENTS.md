@@ -19,14 +19,22 @@ in agreement). Requires WordPress `>= 6.8`, PHP `>= 8.1`.
 - **Dependency direction is one-way and downward only.** RC Core never
   imports, references, or knows about any class in `rc-portal` (namespace
   root `RC\Portal\*`, including embedded modules under
-  `RC\Portal\Modules\*`) or any historical standalone business-module
-  plugin (`RC-Catalog`, `RC-Leads`, etc. — see open question #1 below). RC
-  Core must be able to run correctly with no business plugin active at all.
-- Business code depends on Core; Core depends on nothing above it. RC
-  Portal additionally allows business modules a second, narrower upward
-  dependency on Portal itself for *declarative presentation only* — that is
-  a Portal-side rule (see `rc-portal/modules/AGENTS.md`), not something
-  Core enforces or needs to know about.
+  `RC\Portal\Modules\*`) or `RC\Catalog\*` (the separate `www`-side
+  projection plugin). RC Core must be able to run correctly with no
+  business plugin active at all.
+- **(Decided 2026-09-19)** `my`-side business logic is not a set of
+  separate plugins — it's a single `RC Portal` plugin with modules
+  embedded under `modules/{name}/`. There is no `RC-Leads`, `RC-Products`,
+  `RC-Assets`, etc. as independent deployables; those names now refer to
+  modules inside `rc-portal`. `RC-Catalog` (`www`-side) is unaffected by
+  this decision and remains separate/undecided.
+- **(Decided 2026-09-19, no exception)** Business code depends on Core
+  only — never on Portal for rendering. A module supplies semantic
+  page/table data (`docs/PORTAL-UI.md`'s `PageDefinition`/`TableDefinition`
+  contract); it never builds HTML. This is **not yet implemented** by
+  `rc-portal`'s real modules today — see `docs/PORTAL-UI.md`'s
+  implementation-status note. Don't treat the current HTML-building
+  pattern in `products`/`tools` as an accepted design to extend.
 - **Namespace**: everything under `src/` is `WPRC\Core\*` — this is the
   real, current convention (confirmed by the autoloader, which only loads
   classes under that literal prefix). `docs/ARCHITECTURE.md` §37 documents
@@ -87,22 +95,30 @@ in agreement). Requires WordPress `>= 6.8`, PHP `>= 8.1`.
 - `src/UI/` — the UI Registry business modules declare Admin/Internal/
   External pages into (see `docs/PORTAL-UI.md`).
 - `tools/architecture-preflight.php` — static namespace/pattern scanner
-  (see Validation; **currently partly inert against `rc-portal`**, see
-  `docs/ARCHITECTURE-OPEN-QUESTIONS.md` #1).
+  (see Validation). Rewritten 2026-09-19 to check the real namespaces
+  (`RC\Portal\*`, `RC\Catalog\*`) instead of a retired standalone-plugin
+  namespace list; also now skips any file named `*preflight.php` to avoid
+  false-positiving on a preflight tool's own needle strings (a real
+  failure mode, confirmed empirically — see Validation).
 - `docs/ARCHITECTURE.md` — the declared "frozen" architecture baseline.
-  Mostly accurate and normative, but two sections are known-stale: §37
-  (namespace convention — see above) and §5/§50 Rule #6 (states "business
-  modules depend only on RC-Core," but `docs/MODULE-DEVELOPMENT.md`,
-  `docs/PORTAL-UI.md`, and the preflight tool's own code all agree business
-  modules may *also* depend on RC Portal for declarative presentation —
-  treat that newer, consistent, three-way-agreed rule as current, and
-  §5/§50 Rule #6's wording as not yet caught up).
+  Read its **"Amendments" section first** (right after the header) — it
+  records the two 2026-09-19 decisions (no separate `my`-side plugins; no
+  exception to Portal-owns-rendering) and which passages further down they
+  supersede, rather than requiring a full rewrite of a 1500-line "frozen"
+  document.
 - `docs/MODULE-DEVELOPMENT.md` — shorter, more current companion to
-  ARCHITECTURE.md; prefer it for the module-author's-eye view.
+  ARCHITECTURE.md; prefer it for the module-author's-eye view. Has its own
+  implementation-status notes flagging that its "Module lifecycle" example
+  doesn't match what `rc-portal`'s real modules implement (see
+  `docs/ARCHITECTURE-OPEN-QUESTIONS.md` #1 — a newly-found, still-open
+  question, distinct from the two closed 2026-09-19 decisions).
 - `docs/MULTISITE-CUTOVER.md` — a migration runbook written for the
-  retired standalone-plugin architecture; likely obsolete as written, see
-  open question #1. Don't follow it literally without checking first.
-- `docs/PORTAL-UI.md` — the UI Registry / Portal presentation contract.
+  retired standalone-plugin architecture; now marked historical at the top
+  of the file. Don't follow it literally.
+- `docs/PORTAL-UI.md` — the UI Registry / Portal presentation contract;
+  confirmed normative with no exception, but not yet implemented — read
+  its implementation-status note before assuming any module follows it
+  today.
 - `VALIDATION.md` — a per-release validation snapshot, last written for
   `0.6.0-alpha8`; stale as a "current state" pointer but not wrong about
   what it covers.
@@ -110,9 +126,9 @@ in agreement). Requires WordPress `>= 6.8`, PHP `>= 8.1`.
 ## Mandatory rules
 
 - Never add a `use` of, or otherwise reference, any class under
-  `RC\Portal\*` or a business-module namespace from inside `src/`. This is
-  what `tools/architecture-preflight.php` Check A is meant to enforce (see
-  Validation for its current limitation).
+  `RC\Portal\*` (covers RC Portal and every embedded module, e.g.
+  `RC\Portal\Modules\Products\*`) or `RC\Catalog\*` from inside `src/`.
+  Enforced by `tools/architecture-preflight.php`.
 - All ERP access happens through `src/ERP`/`src/Connectors` and is exposed
   to the rest of the platform only via the `Contracts/ERP/*` interfaces and
   `rc_core()->erp()`. Never add a code path elsewhere (Core or otherwise)
@@ -194,14 +210,15 @@ in agreement). Requires WordPress `>= 6.8`, PHP `>= 8.1`.
   Core. This is a plain string/regex scanner over raw file text, not an
   AST parser — it can be fooled by a comment containing a flagged string,
   and it can miss a dynamically-built namespace string.
-- **Known limitation**: do not rely on running this script against
-  `/path/to/rc-portal` to catch a Core→Portal or module-isolation
-  violation today — its hardcoded namespace map
-  (`WPRC\{Module}\*`, `WPRC\Portal\*`) does not match `rc-portal`'s actual
-  `RC\Portal\*` namespace, so those specific checks currently pass
-  vacuously. See `docs/ARCHITECTURE-OPEN-QUESTIONS.md` #1. Until that's
-  fixed, use `rc-portal/tools/preflight.php`'s own cross-module-import
-  check for that guarantee instead.
+- The script also accepts one or more repo roots on the command line (e.g.
+  `php tools/architecture-preflight.php . /path/to/rc-portal
+  /path/to/rc-portal-theme`) and checks each against the real namespace map
+  (`RC\Portal\*`, `RC\Catalog\*`). It skips any file whose name ends in
+  `preflight.php` (its own needle strings, and the other repos' preflight
+  scripts' needle strings, would otherwise self-match Checks A/C/E — a real,
+  previously-confirmed false positive, now fixed). Still complement it with
+  `rc-portal/tools/preflight.php`'s own cross-module-import check, which
+  targets a narrower, `rc-portal`-specific rule this scanner doesn't cover.
 - No PHPUnit/test suite exists in this repo today. Don't reference one that
   isn't there; if you add meaningful new logic, consider whether a small,
   runnable test is worth adding, but there is no existing harness to plug
@@ -244,7 +261,8 @@ in agreement). Requires WordPress `>= 6.8`, PHP `>= 8.1`.
 |---|---|
 | Module contract, `rc_core()` accessors, capability registration | `docs/MODULE-DEVELOPMENT.md` |
 | ERP providers, caching/locking/telemetry | `docs/ARCHITECTURE.md` §12–13 (ERP sections) + `src/ERP/Cache/*` source |
-| Multisite / `SiteContext` | `docs/ARCHITECTURE.md` (multisite sections) + `docs/MULTISITE-CUTOVER.md` (but verify it still applies — see open question #1) |
+| Multisite / `SiteContext` | `docs/ARCHITECTURE.md` (multisite sections) + `docs/MULTISITE-CUTOVER.md` (marked historical — re-derive the real order from current versions, don't follow it literally) |
 | UI Registry / Admin-Internal-External pages | `docs/PORTAL-UI.md`, then `rc-portal/modules/AGENTS.md` for the consuming side |
 | InternalApi / signed requests | `src/InternalApi/*` source directly — no dedicated doc beyond `docs/ARCHITECTURE.md` §17 |
-| Anything cross-repo (namespace conventions, dependency direction, presentation ownership) | `docs/ARCHITECTURE-OPEN-QUESTIONS.md` first — two open questions directly affect these areas |
+| Module lifecycle / registration (`ModuleInterface` vs. `EmbeddedModuleInterface`) | `docs/ARCHITECTURE-OPEN-QUESTIONS.md` #1 — genuinely unresolved, pick neither contract as "correct" without a human decision |
+| Namespace conventions, dependency direction, presentation ownership | These are now **decided** (2026-09-19, no exception) — read `docs/ARCHITECTURE.md`'s "Amendments" section and `docs/PORTAL-UI.md`'s implementation-status note, not the open-questions doc |

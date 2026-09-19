@@ -7,6 +7,49 @@
 
 ---
 
+## Amendments (read first)
+
+This baseline was written assuming `my`-side business logic would ship as
+several independent plugins (RC-Catalog, RC-Leads, RC-Products, RC-Assets,
+RC-Interventions, RC-Inventory — see §3, §5, §20, §37, §39). Two decisions
+since then supersede that assumption and the specific passages named below;
+everything else in this document (ERP ownership, `www`/`my` site
+responsibilities, caching, security, roles) is unaffected.
+
+1. **(Decided 2026-09-19) No separate `my`-side business plugins.** All
+   `my`-side business logic is embedded inside a single `RC Portal` plugin
+   (`rc-portal`), one module per bounded context under `modules/{name}/`,
+   sharing the namespace root `RC\Portal\Modules\{Module}\`. Wherever §3's
+   topology diagram, §5's dependency diagram, §20's "Business plugins"
+   list, or §37's namespace list name RC-Leads/RC-Products/RC-Assets/
+   RC-Interventions/RC-Inventory as separate plugins, read them as
+   embedded modules of `rc-portal` instead — the isolation rules
+   themselves (no cross-module import, no shared table access, cross-
+   domain reads via Core contracts) are unchanged, just enforced within
+   one repository instead of across several (`rc-portal/tools/preflight.php`
+   is the actual enforcement point today, not a separate per-module
+   preflight run). This does **not** change anything about `RC-Catalog` or
+   `www` — that remains a separate, distinct plugin/site and an open
+   question in its own right (not decided here).
+2. **(Decided 2026-09-19) No exception to Portal-owns-rendering.** The
+   declarative presentation contract in `docs/PORTAL-UI.md`
+   (`PageDefinition`/`TableDefinition`, modules supply semantic data only,
+   Portal is the only HTML/CSS/JS author) is confirmed as normative with
+   **no exception** — this directly settles §50 rule 6's intent. It is,
+   however, **not yet implemented**: `rc-portal`'s actual embedded modules
+   (`products`, `tools`) currently build HTML directly in their own
+   `Ui/*Pages.php` classes rather than through `PageDefinition`/
+   `TableDefinition`. This is tracked as migration debt, not an accepted
+   permanent design — see `docs/PORTAL-UI.md`'s own implementation-status
+   note and `rc-core/docs/ARCHITECTURE-OPEN-QUESTIONS.md`.
+
+See `rc-core/docs/ARCHITECTURE-OPEN-QUESTIONS.md` for what is still
+genuinely undecided (a related, newly-found gap between this document's
+own `ModuleInterface`/`ModuleRegistry` mechanism and what `rc-portal`
+actually implements).
+
+---
+
 ## 1. Purpose
 
 This document defines the mandatory architecture and development rules for the Robotique Concept WordPress platform.
@@ -1150,11 +1193,25 @@ Code MUST:
 
 # 37. Namespace policy
 
-Target namespaces:
+Actual namespaces in shipped code today (2026-09-19) — this supersedes the
+originally-planned list below:
+
+```text
+WPRC\Core\                       (RC Core — note the "W" prefix; shipped
+                                   code has never used bare "RC\Core\")
+RC\Portal\                       (RC Portal runtime)
+RC\Portal\Modules\{Module}\      (each embedded `my`-side business module,
+                                   e.g. RC\Portal\Modules\Products\)
+```
+
+`RC\Catalog\` remains reserved for the separate, still-undecided `www`-side
+projection plugin (see Amendments above) — not an embedded `rc-portal`
+module.
+
+Originally-planned, now-superseded list (kept for history — do not use):
 
 ```text
 RC\Core\
-RC\Catalog\
 RC\Leads\
 RC\Products\
 RC\Assets\
@@ -1162,9 +1219,14 @@ RC\Interventions\
 RC\Inventory\
 ```
 
-A module MUST NOT import another business module namespace.
+A module MUST NOT import another business module's namespace
+(`RC\Portal\Modules\{OtherModule}\`). RC Core MUST NOT import `RC\Portal\*`
+or `RC\Catalog\*`.
 
-This rule SHOULD be automatically checked in CI/preflight.
+This rule is automatically checked by `rc-core/tools/architecture-preflight.php`
+(the Core-boundary check) and by `rc-portal/tools/preflight.php` (the
+module-to-module isolation check, since all `my`-side modules live in one
+repository — see Amendments above).
 
 ---
 
@@ -1419,9 +1481,16 @@ The following are considered frozen unless explicitly revised:
 3. `www` is a public projection and acquisition site.
 4. RC-Core is Network Active.
 5. RC-Core is the platform SDK and convention authority.
-6. Business modules depend only on RC-Core.
+6. Business modules depend only on RC-Core (decided 2026-09-19, no
+   exception: the `docs/PORTAL-UI.md` presentation contract has modules
+   supply semantic data only, never HTML — Portal's role is consuming
+   that data, not being "depended on" for rendering. Not yet fully
+   implemented — see Amendments above and `docs/PORTAL-UI.md`).
 7. RC-Core does not depend on business modules.
-8. Business modules do not depend on each other.
+8. Business modules do not depend on each other (enforced today via
+   `rc-portal/tools/preflight.php`'s cross-module-import check, since all
+   `my`-side modules are embedded in one repository — see Amendments
+   above).
 9. ERP HTTP access belongs to Core.
 10. ERP cache is network-global.
 11. ERP reads are request-deduplicated.
@@ -1433,7 +1502,7 @@ The following are considered frozen unless explicitly revised:
 17. Translations/placeholders/logger shared mechanisms belong to Core.
 18. Business logic remains independent from UI.
 19. The current migration is incremental, not a rewrite.
-20. Existing RC-Catalog and RC-Leads remain operational until their migration phase is complete.
+20. Existing RC-Catalog remains operational until its migration phase is complete (RC-Leads is no longer a separate plugin — it is the `leads` module embedded in RC Portal, see Amendments above).
 
 ---
 

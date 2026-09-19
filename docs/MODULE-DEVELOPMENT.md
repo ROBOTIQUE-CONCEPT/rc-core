@@ -2,6 +2,22 @@
 
 This file is a concise implementation companion to `ARCHITECTURE.md`.
 
+> **Implementation status (2026-09-19):** the module lifecycle shown below
+> (`ModuleInterface`, `rc_register_module()`, the `wprc/core/register_modules`
+> action) is real, shipped Core code — but `rc-portal`'s actual embedded
+> modules do not use it. They implement a different, `rc-portal`-owned
+> interface instead (`EmbeddedModuleInterface`, discovered by
+> `ModuleCatalog::loadFromDirectory()` globbing `modules/*/module.php`),
+> with a different shape (`descriptor(): ModuleDescriptor` instead of
+> separate `id()`/`version()`/`minimumCoreVersion()` methods, and no
+> `Container` parameter on `register()`). Which of the two should be
+> canonical for an embedded `my`-side module is an open question — see
+> `rc-core/docs/ARCHITECTURE-OPEN-QUESTIONS.md`. Don't assume the example
+> below reflects what a module in `rc-portal/modules/` actually looks like
+> today; read an existing one (e.g. `rc-portal/modules/products/module.php`)
+> instead. Separately, the "Presentation surfaces" section further down is
+> also not yet implemented — see its own note and `docs/PORTAL-UI.md`.
+
 ## Mandatory rules
 
 1. A business module depends on RC Core for infrastructure and RC Portal for declarative presentation on `my`; it never depends on another business module.
@@ -107,6 +123,9 @@ A module is not releasable when the architecture preflight fails.
 
 
 ## Presentation surfaces
+
+> **Implementation status (2026-09-19):** confirmed as the target with no
+> exception; not yet implemented. See `docs/PORTAL-UI.md`'s status note.
 
 RC Portal is the only renderer/layout/CSS/JS owner for the `my` application. Business modules may depend on RC Portal's declarative UI definitions and registry, but must not render HTML or ship presentation CSS/JS. Modules provide semantic page/table/form/detail definitions and data providers only.
 
