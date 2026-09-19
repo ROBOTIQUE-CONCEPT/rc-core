@@ -65,6 +65,16 @@ if (!function_exists('rc_translate_e')) {
     }
 }
 
+if (!function_exists('rc_register_module')) {
+    /**
+     * Register an RC business module with the Core lifecycle registry.
+     */
+    function rc_register_module(\WPRC\Core\Contracts\ModuleInterface $module, bool $replace = false): void
+    {
+        rc_core()->modules()->register($module, $replace);
+    }
+}
+
 if (!function_exists('rc_register_capabilities')) {
     /**
      * Declare module-owned capabilities through the Core permission framework.

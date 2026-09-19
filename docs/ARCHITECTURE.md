@@ -42,22 +42,26 @@ responsibilities, caching, security, roles) is unaffected.
    `TableDefinition`. This is tracked as migration debt, not an accepted
    permanent design — see `docs/PORTAL-UI.md`'s own implementation-status
    note and `rc-core/docs/ARCHITECTURE-OPEN-QUESTIONS.md`.
-3. **(Decided 2026-09-19) Core's own module-lifecycle mechanism is
-   retired.** §9 "Module contract" below describes a `ModuleInterface`
-   conceptual example; the real, shipped version of that mechanism
-   (`Contracts\ModuleInterface`, `Module\ModuleRegistry`,
-   `rc_register_module()`, the `wprc/core/register_modules` action) existed
-   in Core but was never used by `rc-portal`'s real embedded modules —
-   confirmed to have zero callers across all three repos. It has been
-   **removed** from `rc-core` (see `CHANGELOG.md`).
-   `RC\Portal\Module\EmbeddedModuleInterface` is the one real, canonical
-   module-lifecycle contract for an embedded `my`-side module — see
-   `rc-portal/modules/AGENTS.md` and `rc-core/docs/MODULE-DEVELOPMENT.md`.
-   Read §9 as historical context for a mechanism that no longer exists in
-   code, not as current API.
+3. **(Attempted 2026-09-19, reverted 2026-09-19) Core's own module-lifecycle
+   mechanism was briefly retired, then restored.** §9 "Module contract"
+   below describes a `ModuleInterface` conceptual example; the real,
+   shipped version of that mechanism (`Contracts\ModuleInterface`,
+   `Module\ModuleRegistry`, `rc_register_module()`, the
+   `wprc/core/register_modules` action) was removed in `rc-core`
+   0.6.0-alpha11 based on a search across `rc-core`, `rc-portal`, and
+   `rc-portal-theme` that found zero callers. That search missed
+   **RC-Catalog** — a fourth, separate `www`-side plugin not covered by
+   this repository, `rc-portal`, or `rc-portal-theme` — which depends on
+   this mechanism in production. The removal broke RC Core on `www` and
+   was reverted in `rc-core` 0.6.0-alpha12. **The mechanism is back and
+   normative again**; `RC\Portal\Module\EmbeddedModuleInterface` remains
+   the canonical contract for `rc-portal`'s embedded modules specifically,
+   and the two are expected to coexist, scoped by which repository a
+   module lives in — see `rc-core/docs/ARCHITECTURE-OPEN-QUESTIONS.md` for
+   the reopened decision on exactly how to document/formalize that split.
 
 See `rc-core/docs/ARCHITECTURE-OPEN-QUESTIONS.md` for what remains
-genuinely undecided — as of this decision, no entries are currently open.
+genuinely undecided — one entry is open (the module-lifecycle split, above).
 
 ---
 
@@ -381,11 +385,16 @@ RC-Assets MUST define its own asset tables and schema.
 
 # 9. Module contract
 
-> **Historical (see Amendments, decision 3, 2026-09-19):** the concrete
-> version of this API (`Contracts\ModuleInterface`, `Module\ModuleRegistry`,
-> `rc_register_module()`) has been removed from `rc-core` — it had zero
-> real callers. The canonical module-lifecycle contract today is
-> `rc-portal`'s `EmbeddedModuleInterface`; see `rc-portal/modules/AGENTS.md`.
+> **Status (see Amendments, decision 3, 2026-09-19):** the concrete version
+> of this API (`Contracts\ModuleInterface`, `Module\ModuleRegistry`,
+> `rc_register_module()`) is real, shipped, and **in production use by
+> RC-Catalog** (the separate `www`-side plugin) — it was briefly removed
+> and then restored after breaking production. `rc-portal`'s embedded
+> modules use a different, `rc-portal`-owned contract instead
+> (`EmbeddedModuleInterface`; see `rc-portal/modules/AGENTS.md`). Which
+> module uses which contract is currently scoped by which repository it
+> lives in — see `rc-core/docs/ARCHITECTURE-OPEN-QUESTIONS.md` for the
+> open decision on formalizing that split.
 
 Every business plugin MUST register itself through the Core-defined module API.
 

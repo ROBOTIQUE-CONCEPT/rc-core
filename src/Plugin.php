@@ -48,6 +48,7 @@ use WPRC\Core\Security\Capabilities\RoleManager;
 use WPRC\Core\Security\Capabilities\RolePolicy;
 use WPRC\Core\Security\Capabilities\RoleRegistry;
 use WPRC\Core\Database\Installer;
+use WPRC\Core\Module\ModuleRegistry;
 use WPRC\Core\Database\TableNames;
 use WPRC\Core\ERP\ProviderRegistry;
 use WPRC\Core\Logging\ContextSanitizer;
@@ -174,10 +175,16 @@ final class Plugin
         // Network Admin role policy. Business modules add their own caps later.
         $this->capabilities()->register('core', AccessPolicy::capabilities());
 
+        /**
+         * Business modules register against Core only. Existing RC plugins do
+         * not need to implement this contract until their migration phase.
+         */
+        do_action('wprc/core/register_modules', $this->modules(), $this);
         $this->container->get(RolePolicy::class)->registerRoles($this->roles());
         if ($this->sites()->isApplicationSite()) {
             $this->container->get(RoleManager::class)->apply();
         }
+        $this->modules()->bootAll();
 
         do_action('wprc/core/ready', $this);
     }
@@ -191,6 +198,7 @@ final class Plugin
 
     public function container(): Container { return $this->container; }
     public function services(): ServiceRegistry { return $this->container->get(ServiceRegistry::class); }
+    public function modules(): ModuleRegistry { return $this->container->get(ModuleRegistry::class); }
     public function capabilities(): CapabilityRegistry { return $this->container->get(CapabilityRegistry::class); }
     public function roles(): RoleRegistry { return $this->container->get(RoleRegistry::class); }
     public function access(): AccessPolicy { return $this->container->get(AccessPolicy::class); }
@@ -227,6 +235,7 @@ final class Plugin
         $this->container->singleton(TableNames::class, static fn (): TableNames => new TableNames());
         $this->container->singleton(ManufacturerRepository::class, static fn (Container $c): ManufacturerRepository => new ManufacturerRepository($c->get(TableNames::class), $c->get(UidGenerator::class)));
         $this->container->singleton(ServiceRegistry::class, static fn (): ServiceRegistry => new ServiceRegistry());
+        $this->container->singleton(ModuleRegistry::class, static fn (Container $c): ModuleRegistry => new ModuleRegistry($c));
         $this->container->singleton(CapabilityRegistry::class, static fn (Container $c): CapabilityRegistry => new CapabilityRegistry($c->get(Settings::class)));
         $this->container->singleton(RoleRegistry::class, static fn (): RoleRegistry => new RoleRegistry());
         $this->container->singleton(RolePolicy::class, static fn (Container $c): RolePolicy => new RolePolicy($c->get(Settings::class), $c->get(CapabilityRegistry::class)));

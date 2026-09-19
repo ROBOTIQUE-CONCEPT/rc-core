@@ -3,7 +3,7 @@
  * Plugin Name: RC Core
  * Plugin URI: https://www.robotiqueconcept.com/
  * Description: Socle technique partagé, connecteurs, cache, journalisation et contrats pour les extensions Robotique Concept.
- * Version: 0.6.0-alpha11
+ * Version: 0.6.0-alpha12
  * Requires at least: 6.8
  * Requires PHP: 8.1
  * Author: Robotique Concept
@@ -17,7 +17,7 @@ declare(strict_types=1);
 
 defined('ABSPATH') || exit;
 
-define('RC_CORE_VERSION', '0.6.0-alpha11');
+define('RC_CORE_VERSION', '0.6.0-alpha12');
 define('RC_CORE_FILE', __FILE__);
 define('RC_CORE_PATH', plugin_dir_path(__FILE__));
 define('RC_CORE_URL', plugin_dir_url(__FILE__));
